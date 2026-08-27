@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Mon Assiette — Suivi alimentaire</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#EEF2EA;
+    --surface:#FFFFFF;
+    --ink:#1F3327;
+    --ink-soft:#5A6B5E;
+    --line:#DCE4D6;
+    --gold:#C89B3C;
+    --gold-soft:#F3E8CE;
+    --sage:#5C8368;
+    --sage-soft:#DCEADD;
+    --coral:#D9634A;
+    --coral-soft:#FBE2DB;
+    --radius:18px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Inter',system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+    padding-bottom:84px;
+  }
+  h1,h2,h3,.display{
+    font-family:'Fraunces',Georgia,serif;
+    font-weight:700;
+    letter-spacing:-0.01em;
+    margin:0;
+  }
+  .mono{
+    font-variant-numeric:tabular-nums;
+    font-feature-settings:"tnum";
+  }
+  header.top{
+    padding:22px 20px 14px;
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+  }
+  header.top .brand{font-size:22px;}
+  header.top .date{font-size:13px;color:var(--ink-soft);text-transform:capitalize;}
+  .screen{padding:0 16px;display:none;animation:fade .25s ease;}
+  .screen.active{display:block;}
+  @keyframes fade{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+
+  /* ---- Gauge (signature element: the plate) ---- */
+  .plate-card{
+    background:var(--surface);
+    border-radius:24px;
+    padding:26px 20px 22px;
+    box-shadow:0 1px 2px rgba(31,51,39,.06), 0 8px 24px rgba(31,51,39,.05);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    margin-bottom:16px;
+  }
+  .plate-wrap{position:relative;width:220px;height:220px;}
+  .plate-wrap svg{width:100%;height:100%;transform:rotate(-90deg);}
+  .plate-center{
+    position:absolute;inset:0;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+  }
+  .plate-center .num{font-size:40px;font-family:'Fraunces',serif;font-weight:700;line-height:1;}
+  .plate-center .lbl{font-size:12px;color:var(--ink-soft);margin-top:6px;letter-spacing:.02em;}
+  .plate-sub{display:flex;gap:22px;margin-top:18px;}
+  .plate-sub div{text-align:center;}
+  .plate-sub .v{font-size:15px;font-weight:600;}
+  .plate-sub .k{font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;}
+
+  .points-pill{
+    margin-top:14px;
+    background:var(--gold-soft);
+    color:#7A5C1E;
+    padding:6px 14px;
+    border-radius:100px;
+    font-size:13px;
+    font-weight:600;
+  }
+
+  /* ---- Entry list ---- */
+  .section-title{
+    font-size:13px;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--ink-soft);margin:22px 4px 10px;font-weight:600;
+  }
+  .entry{
+    background:var(--surface);
+    border-radius:16px;
+    padding:12px 14px;
+    display:flex;
+    align-items:center;
+    gap:12px;
+    margin-bottom:10px;
+    box-shadow:0 1px 2px rgba(31,51,39,.05);
+  }
+  .entry img{width:46px;height:46px;border-radius:10px;object-fit:cover;flex-shrink:0;background:var(--sage-soft);}
+  .entry .noimg{width:46px;height:46px;border-radius:10px;background:var(--sage-soft);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
+  .entry .meta{flex:1;min-width:0;}
+  .entry .meta .name{font-size:14.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .entry .meta .sub{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+  .entry .kcal{font-size:14px;font-weight:600;flex-shrink:0;}
+  .entry .del{background:none;border:none;color:var(--ink-soft);font-size:18px;padding:4px 2px;cursor:pointer;flex-shrink:0;}
+  .empty{
+    text-align:center;color:var(--ink-soft);font-size:13.5px;
+    padding:26px 10px;background:var(--surface);border-radius:16px;
+    border:1px dashed var(--line);
+  }
+
+  /* ---- History strip ---- */
+  .hist-strip{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 6px;}  .hist-day{
+    flex-shrink:0;width:52px;background:var(--surface);border-radius:12px;
+    padding:8px 4px;text-align:center;box-shadow:0 1px 2px rgba(31,51,39,.05);
+  }
+  .hist-day .d{font-size:10px;color:var(--ink-soft);text-transform:uppercase;}
+  .hist-day .bar-track{height:44px;width:8px;background:var(--sage-soft);border-radius:4px;margin:6px auto;position:relative;overflow:hidden;display:flex;align-items:flex-end;}
+  .hist-day .bar-fill{width:100%;border-radius:4px;background:var(--sage);}
+  .hist-day .bar-fill.over{background:var(--coral);}
+  .hist-day .k{font-size:9.5px;color:var(--ink-soft);}
+
+  /* ---- Favorites ---- */
+  .fav-strip{display:flex;gap:10px;overflow-x:auto;padding:2px 2px 8px;}
+  .fav-chip{
+    flex-shrink:0;background:var(--surface);border-radius:14px;
+    padding:10px 12px;min-width:120px;box-shadow:0 1px 2px rgba(31,51,39,.05);
+    position:relative;cursor:pointer;border:1px solid var(--line);
+  }
+  .fav-chip .fname{font-size:13px;font-weight:600;padding-right:14px;line-height:1.3;}
+  .fav-chip .fkcal{font-size:12px;color:var(--ink-soft);margin-top:4px;}
+  .fav-chip .fdel{
+    position:absolute;top:6px;right:7px;background:none;border:none;
+    color:var(--ink-soft);font-size:13px;padding:2px;cursor:pointer;
+  }
+  .fav-add-row{display:flex;align-items:center;gap:8px;margin:2px 4px 0;}
+  .fav-add-row input[type=checkbox]{width:17px;height:17px;}
+  .fav-add-row label{font-size:13px;color:var(--ink-soft);}
+
+  /* ---- Add button (FAB) ---- */
+  .fab{
+    position:fixed;bottom:88px;right:20px;
+    width:58px;height:58px;border-radius:50%;
+    background:var(--ink);color:#fff;border:none;
+    font-size:28px;line-height:1;
+    box-shadow:0 8px 20px rgba(31,51,39,.28);
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;
+  }
+
+  /* ---- Tab bar ---- */
+  nav.tabs{
+    position:fixed;bottom:0;left:0;right:0;
+    background:var(--surface);
+    border-top:1px solid var(--line);
+    display:flex;
+    padding:8px 10px calc(8px + env(safe-area-inset-bottom));
+  }
+  nav.tabs button{
+    flex:1;background:none;border:none;
+    display:flex;flex-direction:column;align-items:center;gap:3px;
+    font-family:inherit;color:var(--ink-soft);font-size:11px;
+    padding:6px 0;cursor:pointer;
+  }
+  nav.tabs button .ic{font-size:19px;}
+  nav.tabs button.active{color:var(--ink);font-weight:600;}
+
+  /* ---- Forms ---- */
+  .field{margin-bottom:16px;}
+  .field label{display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--ink);}
+  .field input, .field select{
+    width:100%;padding:12px 13px;border-radius:12px;border:1px solid var(--line);
+    background:var(--surface);font-size:15px;font-family:inherit;color:var(--ink);
+  }
+  .field input:focus, .field select:focus{outline:2px solid var(--sage);outline-offset:1px;}
+  .seg{display:flex;gap:8px;}
+  .seg button{
+    flex:1;padding:11px 6px;border-radius:12px;border:1px solid var(--line);
+    background:var(--surface);font-family:inherit;font-size:13.5px;color:var(--ink-soft);cursor:pointer;
+  }
+  .seg button.sel{background:var(--ink);color:#fff;border-color:var(--ink);font-weight:600;}
+  .btn-primary{
+    width:100%;padding:14px;border-radius:14px;border:none;
+    background:var(--ink);color:#fff;font-size:15px;font-weight:600;
+    font-family:inherit;cursor:pointer;margin-top:6px;
+  }
+  .btn-secondary{
+    width:100%;padding:13px;border-radius:14px;border:1px solid var(--line);
+    background:var(--surface);color:var(--ink);font-size:14px;font-weight:600;
+    font-family:inherit;cursor:pointer;margin-top:10px;
+  }
+  .note{font-size:12px;color:var(--ink-soft);line-height:1.5;margin-top:14px;padding:0 2px;}
+  .result-card{
+    background:var(--sage-soft);border-radius:16px;padding:18px;text-align:center;margin:18px 0;
+  }
+  .result-card .big{font-family:'Fraunces',serif;font-size:34px;font-weight:700;}
+  .result-card .lbl{font-size:12.5px;color:var(--ink-soft);margin-top:2px;}
+
+  /* ---- Modal ---- */
+  .modal-bg{
+    position:fixed;inset:0;background:rgba(31,51,39,.42);
+    display:none;align-items:flex-end;z-index:50;
+  }
+  .modal-bg.open{display:flex;}
+  .modal{
+    background:var(--bg);width:100%;border-radius:22px 22px 0 0;
+    padding:20px 18px calc(22px + env(safe-area-inset-bottom));
+    max-height:88vh;overflow-y:auto;
+    animation:up .22s ease;
+  }
+  @keyframes up{from{transform:translateY(24px);opacity:0;}to{transform:none;opacity:1;}}
+  .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
+  .modal-head h3{font-size:19px;}
+  .modal-head button{background:none;border:none;font-size:22px;color:var(--ink-soft);cursor:pointer;}
+  .photo-preview{width:100%;height:170px;border-radius:14px;object-fit:cover;background:var(--sage-soft);margin-bottom:12px;}
+  .upload-row{display:flex;gap:10px;margin-bottom:6px;}
+  .upload-row label{
+    flex:1;text-align:center;padding:14px 8px;border-radius:14px;
+    border:1.5px dashed var(--line);background:var(--surface);
+    font-size:13px;font-weight:600;color:var(--ink-soft);cursor:pointer;
+  }
+  .upload-row input[type=file]{display:none;}
+  .loading{display:flex;align-items:center;gap:10px;padding:16px 4px;color:var(--ink-soft);font-size:13.5px;}
+  .spinner{width:18px;height:18px;border-radius:50%;border:2.5px solid var(--line);border-top-color:var(--sage);animation:spin .7s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .divider-or{display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--ink-soft);font-size:12px;}
+  .divider-or::before,.divider-or::after{content:"";flex:1;height:1px;background:var(--line);}
+  .err{background:var(--coral-soft);color:#93341F;padding:10px 12px;border-radius:10px;font-size:13px;margin:8px 0;}
+  .toast{
+    position:fixed;top:14px;left:50%;transform:translateX(-50%);
+    background:var(--ink);color:#fff;padding:10px 16px;border-radius:100px;
+    font-size:12.5px;z-index:80;box-shadow:0 6px 18px rgba(0,0,0,.2);
+    opacity:0;pointer-events:none;transition:opacity .3s ease;max-width:88%;text-align:center;
+  }
+  .toast.show{opacity:1;}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand display">Mon Assiette</div>
+  <div class="date" id="todayLabel"></div>
+</header>
+
+<!-- ===================== JOURNAL ===================== -->
+<section class="screen active" id="screen-journal">
+  <div class="plate-card">
+    <div class="plate-wrap">
+      <svg viewBox="0 0 200 200">
+        <circle cx="100" cy="100" r="86" fill="none" stroke="#E4EADF" stroke-width="14"/>
+        <circle id="gaugeRing" cx="100" cy="100" r="86" fill="none" stroke="#5C8368" stroke-width="14"
+                stroke-linecap="round" stroke-dasharray="540" stroke-dashoffset="540"/>
+      </svg>
+      <div class="plate-center">
+        <div class="num mono" id="kcalRemaining">—</div>
+        <div class="lbl">kcal restantes</div>
+      </div>
+    </div>
+    <div class="plate-sub">
+      <div><div class="v mono" id="kcalConsumed">0</div><div class="k">consommées</div></div>
+      <div><div class="v mono" id="kcalTarget">—</div><div class="k">objectif</div></div>
+    </div>
+    <div class="points-pill" id="pointsPill">0 / 0 points</div>
+  </div>
+
+  <div class="hist-strip" id="histStrip"></div>
+
+  <div class="section-title">Repas favoris</div>
+  <div class="fav-strip" id="favStrip"></div>
+
+  <div class="section-title">Repas d'aujourd'hui</div>
+  <div id="entryList"></div>
+</section>
+
+<!-- ===================== PROFIL ===================== -->
+<section class="screen" id="screen-profil">
+  <h2 style="font-size:20px;margin:18px 4px 4px;">Ton profil</h2>
+  <p style="font-size:13px;color:var(--ink-soft);margin:6px 4px 18px;">
+    Utilisé pour calculer ton besoin calorique quotidien (formule de Mifflin-St Jeor).
+  </p>
+
+  <div class="field">
+    <label>Sexe</label>
+    <div class="seg">
+      <button type="button" data-field="sex" data-val="femme" class="sexbtn">Femme</button>
+      <button type="button" data-field="sex" data-val="homme" class="sexbtn">Homme</button>
+    </div>
+  </div>
+
+  <div class="field"><label>Âge (années)</label><input type="number" id="inAge" inputmode="numeric" placeholder="ex. 42"></div>
+  <div class="field"><label>Taille (cm)</label><input type="number" id="inHeight" inputmode="numeric" placeholder="ex. 178"></div>
+  <div class="field"><label>Poids actuel (kg)</label><input type="number" id="inWeight" inputmode="decimal" placeholder="ex. 84"></div>
+
+  <div class="field">
+    <label>Niveau d'activité</label>
+    <select id="inActivity">
+      <option value="1.2">Sédentaire (peu ou pas d'exercice)</option>
+      <option value="1.375">Légèrement actif (1-3 j/sem)</option>
+      <option value="1.55" selected>Modérément actif (3-5 j/sem)</option>
+      <option value="1.725">Très actif (6-7 j/sem)</option>
+      <option value="1.9">Extrêmement actif (physique + sport)</option>
+    </select>
+  </div>
+
+  <div class="field">
+    <label>Objectif</label>
+    <div class="seg">
+      <button type="button" data-field="goal" data-val="0" class="goalbtn">Maintien</button>
+      <button type="button" data-field="goal" data-val="0.25" class="goalbtn">-0,25 kg/sem</button>
+      <button type="button" data-field="goal" data-val="0.5" class="goalbtn">-0,5 kg/sem</button>
+    </div>
+  </div>
+
+  <button class="btn-primary" id="saveProfileBtn">Calculer mon objectif</button>
+
+  <div id="profileResult"></div>
+
+  <p class="note">
+    Ceci est une estimation générale et ne remplace pas l'avis d'un médecin ou d'un(e) diététicien(ne),
+    en particulier si tu as une condition de santé particulière. Un déficit de 0,25 à 0,5 kg/semaine
+    est considéré comme un rythme raisonnable et durable.
+  </p>
+
+  <div class="section-title" style="margin-top:30px;">Analyse photo (IA) — optionnel, payant à l'usage</div>
+  <p class="note" style="margin-top:0;">
+    Sans réglage ici, la photo sert juste de repère visuel : tu saisis toi-même les calories (comme en lisant
+    une étiquette). L'analyse automatique nécessite un service tiers payant (API Anthropic) — laisse ce champ
+    vide si tu ne veux pas l'utiliser, l'app fonctionne très bien sans.
+  </p>
+  <div class="field">
+    <label>URL du relais (facultatif)</label>
+    <input type="text" id="inRelayUrl" placeholder="https://mon-assiette-relais.mon-compte.workers.dev">
+  </div>
+  <button class="btn-secondary" id="saveRelayBtn">Enregistrer l'URL du relais</button>
+  <div id="relayMsg"></div>
+
+  <div class="section-title" style="margin-top:30px;">Sauvegarde manuelle</div>
+  <p class="note" style="margin-top:0;">
+    Tes données sont sauvegardées automatiquement sur cet appareil (ce navigateur). Utilise ceci pour
+    transférer tes données vers un autre appareil, ou pour garder une copie de secours.
+  </p>
+  <button class="btn-secondary" id="exportBtn">📋 Copier mes données</button>
+  <textarea id="exportArea" readonly style="width:100%;margin-top:10px;min-height:70px;border-radius:12px;border:1px solid var(--line);padding:10px;font-size:11px;font-family:ui-monospace,monospace;display:none;background:var(--surface);color:var(--ink-soft);"></textarea>
+
+  <div class="field" style="margin-top:16px;">
+    <label>Restaurer une sauvegarde collée</label>
+    <textarea id="importArea" placeholder="Colle ici le texte copié précédemment…" style="width:100%;min-height:70px;border-radius:12px;border:1px solid var(--line);padding:10px;font-size:11px;font-family:ui-monospace,monospace;"></textarea>
+  </div>
+  <button class="btn-secondary" id="importBtn">📥 Restaurer mes données</button>
+  <div id="backupMsg"></div>
+</section>
+
+<button class="fab" id="fabAdd" aria-label="Ajouter un repas">+</button>
+<div class="toast" id="toast"></div>
+
+<nav class="tabs">
+  <button class="active" data-screen="journal"><span class="ic">🍽️</span>Journal</button>
+  <button data-screen="profil"><span class="ic">⚙️</span>Profil</button>
+</nav>
+
+<!-- ===================== MODAL: ADD ENTRY ===================== -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 class="display">Ajouter un repas</h3>
+      <button id="closeModal">✕</button>
+    </div>
+
+    <div id="modalStep1">
+      <div class="upload-row">
+        <label>📷 Prendre une photo
+          <input type="file" id="fileCamera" accept="image/*" capture="environment">
+        </label>
+        <label>🖼️ Choisir une image
+          <input type="file" id="fileUpload" accept="image/*">
+        </label>
+      </div>
+      <div class="divider-or">ou</div>
+      <button class="btn-secondary" id="manualBtn">Saisir manuellement</button>
+    </div>
+
+    <div id="modalAnalyzing" style="display:none;">
+      <img id="previewImg" class="photo-preview">
+      <div class="loading"><div class="spinner"></div> Analyse de l'assiette en cours…</div>
+    </div>
+
+    <div id="modalForm" style="display:none;">
+      <img id="previewImg2" class="photo-preview" style="display:none;">
+      <div id="analyzeErr"></div>
+      <div class="field"><label>Aliment / repas</label><input type="text" id="fName" placeholder="ex. Salade César au poulet"></div>
+      <div class="field"><label>Calories estimées (kcal)</label><input type="number" id="fKcal" inputmode="numeric"></div>
+      <div class="field"><label>Points</label><input type="number" id="fPoints" inputmode="numeric"></div>
+      <p class="note" id="analyzeNote" style="margin-top:0;"></p>
+      <div class="fav-add-row">
+        <input type="checkbox" id="fSaveFav">
+        <label for="fSaveFav">Enregistrer comme repas favori (accès rapide)</label>
+      </div>
+      <button class="btn-primary" id="confirmAddBtn">Ajouter au journal</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------------- State & helpers ---------------- */
+let profile = null;
+let currentImageBase64 = null;
+let currentImageMedia = null;
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 3200);
+}
+
+function todayKey(){
+  const d = new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function dateKeyOffset(n){
+  const d = new Date();
+  d.setDate(d.getDate()-n);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+document.getElementById('todayLabel').textContent = new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
+
+/* ---------------- Storage wrappers (localStorage — reliable on your own device) ---------------- */
+async function storeGet(key){
+  try{
+    const raw = localStorage.getItem('assiette:'+key);
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){ return null; }
+}
+async function storeSet(key, value){
+  try{
+    localStorage.setItem('assiette:'+key, JSON.stringify(value));
+    return true;
+  }catch(e){
+    console.error('Échec de sauvegarde locale', e);
+    showToast("Échec de la sauvegarde locale — vérifie l'espace de stockage du navigateur.");
+    return false;
+  }
+}
+
+/* ---------------- Tabs ---------------- */
+document.querySelectorAll('nav.tabs button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+    document.getElementById('screen-'+btn.dataset.screen).classList.add('active');
+  });
+});
+
+/* ---------------- Profil form ---------------- */
+let selSex = null, selGoal = null;
+document.querySelectorAll('.sexbtn').forEach(b=>b.addEventListener('click', ()=>{
+  document.querySelectorAll('.sexbtn').forEach(x=>x.classList.remove('sel'));
+  b.classList.add('sel'); selSex = b.dataset.val;
+}));
+document.querySelectorAll('.goalbtn').forEach(b=>b.addEventListener('click', ()=>{
+  document.querySelectorAll('.goalbtn').forEach(x=>x.classList.remove('sel'));
+  b.classList.add('sel'); selGoal = parseFloat(b.dataset.val);
+}));
+
+function computeTarget(p){
+  const bmr = p.sex==='homme'
+    ? 10*p.weight + 6.25*p.height - 5*p.age + 5
+    : 10*p.weight + 6.25*p.height - 5*p.age - 161;
+  const tdee = bmr * p.activity;
+  const deficit = (p.goalRate||0) * 7700 / 7; // ~7700 kcal par kg de graisse
+  let target = Math.round(tdee - deficit);
+  const floor = p.sex==='homme' ? 1500 : 1200;
+  const clamped = Math.max(target, floor);
+  return { bmr: Math.round(bmr), tdee: Math.round(tdee), target: clamped, wasClamped: clamped>target };
+}
+
+document.getElementById('saveProfileBtn').addEventListener('click', async ()=>{
+  const age = parseFloat(document.getElementById('inAge').value);
+  const height = parseFloat(document.getElementById('inHeight').value);
+  const weight = parseFloat(document.getElementById('inWeight').value);
+  const activity = parseFloat(document.getElementById('inActivity').value);
+  const resultDiv = document.getElementById('profileResult');
+
+  if(!selSex || !age || !height || !weight || selGoal===null){
+    resultDiv.innerHTML = '<div class="err">Merci de remplir tous les champs et de choisir le sexe et l\'objectif.</div>';
+    return;
+  }
+  profile = { sex:selSex, age, height, weight, activity, goalRate:selGoal };
+  const r = computeTarget(profile);
+  profile.target = r.target;
+  await storeSet('profile', profile);
+
+  resultDiv.innerHTML = `
+    <div class="result-card">
+      <div class="big mono">${r.target}</div>
+      <div class="lbl">kcal / jour recommandées</div>
+    </div>
+    <p class="note">Dépense de base estimée (métabolisme) : ${r.bmr} kcal · dépense totale avec activité : ${r.tdee} kcal.
+    ${r.wasClamped ? " L'objectif a été ajusté à un minimum sûr pour ce profil." : ""}</p>
+  `;
+  renderJournal();
+  renderHistory();
+});
+
+async function loadProfileIntoForm(){
+  profile = await storeGet('profile');
+  if(!profile) return;
+  document.getElementById('inAge').value = profile.age;
+  document.getElementById('inHeight').value = profile.height;
+  document.getElementById('inWeight').value = profile.weight;
+  document.getElementById('inActivity').value = profile.activity;
+  selSex = profile.sex;
+  selGoal = profile.goalRate;
+  document.querySelectorAll('.sexbtn').forEach(b=>b.classList.toggle('sel', b.dataset.val===selSex));
+  document.querySelectorAll('.goalbtn').forEach(b=>b.classList.toggle('sel', parseFloat(b.dataset.val)===selGoal));
+  const r = computeTarget(profile);
+  document.getElementById('profileResult').innerHTML = `
+    <div class="result-card">
+      <div class="big mono">${profile.target}</div>
+      <div class="lbl">kcal / jour recommandées</div>
+    </div>
+    <p class="note">Dépense de base estimée : ${r.bmr} kcal · dépense totale : ${r.tdee} kcal.</p>
+  `;
+  const relayUrl = await storeGet('relayUrl');
+  if(relayUrl) document.getElementById('inRelayUrl').value = relayUrl;
+}
+
+document.getElementById('saveRelayBtn').addEventListener('click', async ()=>{
+  const url = document.getElementById('inRelayUrl').value.trim();
+  await storeSet('relayUrl', url);
+  document.getElementById('relayMsg').innerHTML = '<p class="note" style="color:#2E5C3A;">URL enregistrée.</p>';
+});
+
+/* ---------------- Journal rendering ---------------- */
+let journalData = null; // { "2026-08-26": [entry, ...], ... } — single key to minimize storage calls
+async function loadJournal(){
+  if(journalData) return journalData;
+  journalData = (await storeGet('journal')) || {};
+  return journalData;
+}
+async function getEntries(dateKey){
+  const j = await loadJournal();
+  return j[dateKey] || [];
+}
+async function saveEntries(dateKey, list){
+  const j = await loadJournal();
+  j[dateKey] = list;
+  await storeSet('journal', j);
+}
+
+async function renderJournal(){
+  const list = await getEntries(todayKey());
+  const consumed = list.reduce((s,e)=>s+(e.kcal||0),0);
+  const pointsUsed = list.reduce((s,e)=>s+(e.points||0),0);
+  const target = profile ? profile.target : null;
+  const pointsBudget = target ? Math.round(target/50) : null;
+
+  document.getElementById('kcalConsumed').textContent = consumed;
+  document.getElementById('kcalTarget').textContent = target ?? '—';
+  document.getElementById('kcalRemaining').textContent = target ? Math.max(target-consumed,0) : '—';
+  document.getElementById('pointsPill').textContent = target ? `${pointsUsed} / ${pointsBudget} points` : 'Complète ton profil';
+
+  const ring = document.getElementById('gaugeRing');
+  const circumference = 540;
+  if(target){
+    const ratio = Math.min(consumed/target, 1.15);
+    const offset = circumference * (1-Math.min(ratio,1));
+    ring.setAttribute('stroke-dashoffset', offset);
+    ring.setAttribute('stroke', ratio>1 ? '#D9634A' : (ratio>0.85 ? '#C89B3C' : '#5C8368'));
+  } else {
+    ring.setAttribute('stroke-dashoffset', circumference);
+  }
+
+  const entryList = document.getElementById('entryList');
+  if(list.length===0){
+    entryList.innerHTML = '<div class="empty">Aucun repas ajouté aujourd\'hui.<br>Touche le bouton + pour prendre en photo ton assiette.</div>';
+    return;
+  }
+  entryList.innerHTML = list.map((e,i)=>`
+    <div class="entry">
+      ${e.thumb ? `<img src="${e.thumb}">` : `<div class="noimg">🍴</div>`}
+      <div class="meta">
+        <div class="name">${escapeHtml(e.name)}</div>
+        <div class="sub">${e.points} points</div>
+      </div>
+      <div class="kcal mono">${e.kcal} kcal</div>
+      <button class="del" data-i="${i}">✕</button>
+    </div>
+  `).join('');
+  entryList.querySelectorAll('.del').forEach(b=>b.addEventListener('click', async ()=>{
+    const i = parseInt(b.dataset.i);
+    list.splice(i,1);
+    await saveEntries(todayKey(), list);
+    renderJournal();
+    renderHistory();
+  }));
+}
+function escapeHtml(s){
+  const d = document.createElement('div'); d.textContent = s||''; return d.innerHTML;
+}
+
+/* ---------------- History strip (7 last days) ---------------- */
+async function renderHistory(){
+  const strip = document.getElementById('histStrip');
+  const target = profile ? profile.target : 2000;
+  const days = [];
+  for(let i=6;i>=0;i--) days.push(dateKeyOffset(i));
+  const totals = await Promise.all(days.map(d=>getEntries(d)));
+  strip.innerHTML = days.map((d,i)=>{
+    const total = totals[i].reduce((s,e)=>s+(e.kcal||0),0);
+    const ratio = Math.min(total/target, 1.3);
+    const h = Math.max(ratio*44, total>0?4:2);
+    const label = new Date(d+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'short'}).replace('.','');
+    return `<div class="hist-day">
+      <div class="d">${label}</div>
+      <div class="bar-track"><div class="bar-fill ${ratio>1?'over':''}" style="height:${h}px"></div></div>
+      <div class="k mono">${total||'–'}</div>
+    </div>`;
+  }).join('');
+}
+
+/* ---------------- Favorites (quick-add saved meals) ---------------- */
+const DEFAULT_FAVORITES = [
+  { id:'petit-dej-type', name:'Petit-déj: poulet fumé, pain, fromage frais', kcal:195, points:4 }
+];
+let favoritesData = null;
+async function loadFavorites(){
+  if(favoritesData) return favoritesData;
+  const existing = await storeGet('favorites');
+  if(existing === null){
+    favoritesData = DEFAULT_FAVORITES.slice();
+    await storeSet('favorites', favoritesData);
+  } else {
+    favoritesData = existing;
+  }
+  return favoritesData;
+}
+async function renderFavorites(){
+  const favs = await loadFavorites();
+  const strip = document.getElementById('favStrip');
+  if(favs.length===0){
+    strip.innerHTML = '<div class="note" style="margin:0 4px;">Coche « Enregistrer comme favori » en ajoutant un repas pour le retrouver ici.</div>';
+    return;
+  }
+  strip.innerHTML = favs.map((f,i)=>`
+    <div class="fav-chip" data-i="${i}">
+      <button class="fdel" data-i="${i}">✕</button>
+      <div class="fname">${escapeHtml(f.name)}</div>
+      <div class="fkcal mono">${f.kcal} kcal · ${f.points} pts</div>
+    </div>
+  `).join('');
+  strip.querySelectorAll('.fav-chip').forEach(chip=>{
+    chip.addEventListener('click', async (e)=>{
+      if(e.target.classList.contains('fdel')) return;
+      const f = favs[parseInt(chip.dataset.i)];
+      const list = await getEntries(todayKey());
+      list.push({ name:f.name, kcal:f.kcal, points:f.points, thumb:null, ts:Date.now() });
+      await saveEntries(todayKey(), list);
+      renderJournal();
+      renderHistory();
+      showToast(`${f.name} ajouté au journal.`);
+    });
+  });
+  strip.querySelectorAll('.fdel').forEach(b=>{
+    b.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      const i = parseInt(b.dataset.i);
+      if(!confirm('Retirer ce favori ?')) return;
+      favs.splice(i,1);
+      await storeSet('favorites', favs);
+      renderFavorites();
+    });
+  });
+}
+
+/* ---------------- Modal / add entry flow ---------------- */
+const modalBg = document.getElementById('modalBg');
+function openModal(){
+  modalBg.classList.add('open');
+  document.getElementById('modalStep1').style.display='block';
+  document.getElementById('modalAnalyzing').style.display='none';
+  document.getElementById('modalForm').style.display='none';
+  document.getElementById('analyzeErr').innerHTML='';
+  document.getElementById('analyzeNote').textContent='';
+  document.getElementById('fName').value='';
+  document.getElementById('fKcal').value='';
+  document.getElementById('fPoints').value='';
+  currentImageBase64 = null;
+}
+function closeModal(){ modalBg.classList.remove('open'); }
+document.getElementById('fabAdd').addEventListener('click', openModal);
+document.getElementById('closeModal').addEventListener('click', closeModal);
+modalBg.addEventListener('click', (e)=>{ if(e.target===modalBg) closeModal(); });
+
+document.getElementById('manualBtn').addEventListener('click', ()=>{
+  document.getElementById('modalStep1').style.display='none';
+  document.getElementById('modalForm').style.display='block';
+  document.getElementById('previewImg2').style.display='none';
+  document.getElementById('analyzeNote').textContent = 'Saisis les informations du repas.';
+});
+
+function handleFile(file){
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async ()=>{
+    const dataUrl = reader.result;
+    currentImageMedia = file.type || 'image/jpeg';
+    currentImageBase64 = dataUrl.split(',')[1];
+    document.getElementById('modalStep1').style.display='none';
+    document.getElementById('modalAnalyzing').style.display='block';
+    document.getElementById('previewImg').src = dataUrl;
+    await analyzePhoto(dataUrl);
+  };
+  reader.readAsDataURL(file);
+}
+document.getElementById('fileCamera').addEventListener('change', e=>handleFile(e.target.files[0]));
+document.getElementById('fileUpload').addEventListener('change', e=>handleFile(e.target.files[0]));
+
+async function analyzePhoto(dataUrl){
+  const relayUrl = await storeGet('relayUrl');
+  if(!relayUrl){
+    document.getElementById('modalAnalyzing').style.display='none';
+    document.getElementById('modalForm').style.display='block';
+    document.getElementById('previewImg2').style.display='block';
+    document.getElementById('previewImg2').src = dataUrl;
+    document.getElementById('analyzeNote').textContent = 'Analyse automatique désactivée (aucune URL de relais renseignée dans Profil). Saisis les valeurs manuellement.';
+    return;
+  }
+  try{
+    const response = await fetch(relayUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ media_type: currentImageMedia, base64: currentImageBase64 })
+    });
+    const data = await response.json();
+    const textBlock = (data.content||[]).find(b=>b.type==='text');
+    if(!textBlock) throw new Error(data.error || 'no text');
+    let clean = textBlock.text.replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(clean);
+
+    document.getElementById('modalAnalyzing').style.display='none';
+    document.getElementById('modalForm').style.display='block';
+    document.getElementById('previewImg2').style.display='block';
+    document.getElementById('previewImg2').src = dataUrl;
+    document.getElementById('fName').value = parsed.name || '';
+    document.getElementById('fKcal').value = parsed.kcal || '';
+    document.getElementById('fPoints').value = parsed.points || (parsed.kcal ? Math.round(parsed.kcal/50) : '');
+    document.getElementById('analyzeNote').textContent = (parsed.portion_note || '') + ' — Estimation automatique, ajuste si besoin avant d\'ajouter.';
+  }catch(err){
+    document.getElementById('modalAnalyzing').style.display='none';
+    document.getElementById('modalForm').style.display='block';
+    document.getElementById('previewImg2').style.display='block';
+    document.getElementById('previewImg2').src = dataUrl;
+    document.getElementById('analyzeErr').innerHTML = '<div class="err">L\'analyse automatique a échoué (relais injoignable ou clé API manquante). Renseigne les valeurs manuellement.</div>';
+    document.getElementById('analyzeNote').textContent = '';
+  }
+}
+
+document.getElementById('confirmAddBtn').addEventListener('click', async ()=>{
+  const name = document.getElementById('fName').value.trim();
+  const kcal = parseInt(document.getElementById('fKcal').value);
+  const points = parseInt(document.getElementById('fPoints').value) || Math.round((kcal||0)/50);
+  if(!name || !kcal){
+    document.getElementById('analyzeErr').innerHTML = '<div class="err">Merci d\'indiquer au moins un nom et des calories.</div>';
+    return;
+  }
+  const entry = { name, kcal, points, thumb: currentImageBase64 ? ('data:'+currentImageMedia+';base64,'+currentImageBase64) : null, ts: Date.now() };
+  const list = await getEntries(todayKey());
+  list.push(entry);
+  await saveEntries(todayKey(), list);
+  if(document.getElementById('fSaveFav').checked){
+    const favs = await loadFavorites();
+    favs.push({ id:'fav-'+Date.now(), name, kcal, points });
+    await storeSet('favorites', favs);
+    renderFavorites();
+  }
+  closeModal();
+  renderJournal();
+  renderHistory();
+});
+
+/* ---------------- Manual backup (export / import) ---------------- */
+document.getElementById('exportBtn').addEventListener('click', async ()=>{
+  const j = await loadJournal();
+  const f = await loadFavorites();
+  const payload = JSON.stringify({ profile, journal: j, favorites: f });
+  const area = document.getElementById('exportArea');
+  area.style.display = 'block';
+  area.value = payload;
+  area.focus();
+  area.select();
+  try{
+    await navigator.clipboard.writeText(payload);
+    document.getElementById('backupMsg').innerHTML = '<p class="note" style="color:#2E5C3A;">Copié ! Colle ce texte dans tes Notes pour le retrouver plus tard.</p>';
+  }catch(e){
+    document.getElementById('backupMsg').innerHTML = '<p class="note">Le texte ci-dessus est sélectionné : copie-le manuellement (le presse-papiers automatique n\'a pas fonctionné).</p>';
+  }
+});
+
+document.getElementById('importBtn').addEventListener('click', async ()=>{
+  const raw = document.getElementById('importArea').value.trim();
+  const msg = document.getElementById('backupMsg');
+  if(!raw){ msg.innerHTML = '<div class="err">Colle d\'abord le texte de ta sauvegarde.</div>'; return; }
+  try{
+    const parsed = JSON.parse(raw);
+    if(parsed.profile){
+      profile = parsed.profile;
+      await storeSet('profile', profile);
+    }
+    if(parsed.journal){
+      journalData = parsed.journal;
+      await storeSet('journal', journalData);
+    }
+    if(parsed.favorites){
+      favoritesData = parsed.favorites;
+      await storeSet('favorites', favoritesData);
+    }
+    msg.innerHTML = '<p class="note" style="color:#2E5C3A;">Données restaurées avec succès.</p>';
+    await loadProfileIntoForm();
+    await renderJournal();
+    await renderHistory();
+    await renderFavorites();
+  }catch(e){
+    msg.innerHTML = '<div class="err">Ce texte ne semble pas être une sauvegarde valide.</div>';
+  }
+});
+
+/* ---------------- Init ---------------- */
+(async function init(){
+  await loadProfileIntoForm();
+  await renderJournal();
+  await renderHistory();
+  await renderFavorites();
+  if(!profile){
+    document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+    document.querySelector('nav.tabs button[data-screen="profil"]').classList.add('active');
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+    document.getElementById('screen-profil').classList.add('active');
+  }
+})();
+</script>
+</body>
+</html>
