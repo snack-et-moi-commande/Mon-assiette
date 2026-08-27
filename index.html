@@ -395,7 +395,7 @@
       <div id="analyzeErr"></div>
       <div class="field"><label>Aliment / repas</label><input type="text" id="fName" placeholder="ex. Salade César au poulet"></div>
       <div class="field"><label>Calories estimées (kcal)</label><input type="number" id="fKcal" inputmode="numeric"></div>
-      <div class="field"><label>Points</label><input type="number" id="fPoints" inputmode="numeric"></div>
+      <div class="field"><label>Points (calculé auto, modifiable)</label><input type="number" id="fPoints" inputmode="numeric"></div>
       <p class="note" id="analyzeNote" style="margin-top:0;"></p>
       <div class="fav-add-row">
         <input type="checkbox" id="fSaveFav">
@@ -763,6 +763,11 @@ async function analyzePhoto(dataUrl){
     document.getElementById('analyzeNote').textContent = '';
   }
 }
+
+document.getElementById('fKcal').addEventListener('input', ()=>{
+  const kcal = parseInt(document.getElementById('fKcal').value);
+  document.getElementById('fPoints').value = kcal ? Math.round(kcal/50) : '';
+});
 
 document.getElementById('confirmAddBtn').addEventListener('click', async ()=>{
   const name = document.getElementById('fName').value.trim();
