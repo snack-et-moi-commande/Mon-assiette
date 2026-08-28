@@ -271,7 +271,7 @@
   <div class="brand display">Mon Assiette</div>
   <div style="text-align:right;">
     <div class="date" id="todayLabel"></div>
-    <div class="version">v2026-08-27-2</div>
+    <div class="version">v2026-08-27-3</div>
   </div>
 </header>
 
@@ -1005,7 +1005,7 @@ document.getElementById('addWeightBtn').addEventListener('click', async ()=>{
   await renderHistory();
   await renderFavorites();
   await renderWeight();
-    document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+  if(!profile){
     document.querySelector('nav.tabs button[data-screen="profil"]').classList.add('active');
     document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
     document.getElementById('screen-profil').classList.add('active');
