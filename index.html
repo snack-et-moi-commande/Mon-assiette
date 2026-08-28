@@ -172,6 +172,29 @@
   nav.tabs button .ic{font-size:19px;}
   nav.tabs button.active{color:var(--ink);font-weight:600;}
 
+  /* ---- Weight tracking ---- */
+  .weight-card{
+    background:var(--surface);border-radius:20px;padding:20px;
+    box-shadow:0 1px 2px rgba(31,51,39,.06), 0 8px 24px rgba(31,51,39,.05);
+    margin-bottom:16px;
+  }
+  .weight-current{text-align:center;margin-bottom:14px;}
+  .weight-current .num{font-family:'Fraunces',serif;font-size:38px;font-weight:700;}
+  .weight-current .delta{font-size:13px;margin-top:2px;}
+  .weight-current .delta.down{color:var(--sage);}
+  .weight-current .delta.up{color:var(--coral);}
+  .weight-chart{width:100%;height:130px;margin:10px 0 4px;}
+  .weight-log-row{display:flex;gap:8px;margin-bottom:8px;}
+  .weight-log-row input{flex:1;}
+  .weight-entry{
+    display:flex;align-items:center;justify-content:space-between;
+    background:var(--surface);border-radius:12px;padding:10px 14px;margin-bottom:8px;
+    box-shadow:0 1px 2px rgba(31,51,39,.05);
+  }
+  .weight-entry .wd{font-size:13px;color:var(--ink-soft);}
+  .weight-entry .wv{font-size:14.5px;font-weight:600;}
+  .weight-entry .wdel{background:none;border:none;color:var(--ink-soft);font-size:16px;cursor:pointer;}
+
   /* ---- Forms ---- */
   .field{margin-bottom:16px;}
   .field label{display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--ink);}
@@ -248,7 +271,7 @@
   <div class="brand display">Mon Assiette</div>
   <div style="text-align:right;">
     <div class="date" id="todayLabel"></div>
-    <div class="version">v2026-08-27-1</div>
+    <div class="version">v2026-08-27-2</div>
   </div>
 </header>
 
@@ -282,9 +305,31 @@
   <div id="entryList"></div>
 </section>
 
+<!-- ===================== POIDS ===================== -->
+<section class="screen" id="screen-poids">
+  <h2 style="font-size:20px;margin:18px 4px 4px;">Suivi du poids</h2>
+
+  <div class="weight-card">
+    <div class="weight-current">
+      <div class="num mono" id="weightCurrentNum">—</div>
+      <div class="delta" id="weightDelta"></div>
+    </div>
+    <svg class="weight-chart" id="weightChart" viewBox="0 0 320 130" preserveAspectRatio="none"></svg>
+    <div class="weight-log-row">
+      <input type="number" id="inNewWeight" inputmode="decimal" placeholder="Poids aujourd'hui (kg)" step="0.1">
+      <button class="btn-primary" style="width:auto;padding:12px 16px;margin-top:0;" id="addWeightBtn">Ajouter</button>
+    </div>
+    <p class="note" id="weightNote" style="margin-top:8px;"></p>
+  </div>
+
+  <div class="section-title">Historique</div>
+  <div id="weightList"></div>
+</section>
+
 <!-- ===================== PROFIL ===================== -->
 <section class="screen" id="screen-profil">
   <h2 style="font-size:20px;margin:18px 4px 4px;">Ton profil</h2>
+
   <p style="font-size:13px;color:var(--ink-soft);margin:6px 4px 18px;">
     Utilisé pour calculer ton besoin calorique quotidien (formule de Mifflin-St Jeor).
   </p>
@@ -365,6 +410,7 @@
 
 <nav class="tabs">
   <button class="active" data-screen="journal"><span class="ic">🍽️</span>Journal</button>
+  <button data-screen="poids"><span class="ic">⚖️</span>Poids</button>
   <button data-screen="profil"><span class="ic">⚙️</span>Profil</button>
 </nav>
 
@@ -800,7 +846,8 @@ document.getElementById('confirmAddBtn').addEventListener('click', async ()=>{
 document.getElementById('exportBtn').addEventListener('click', async ()=>{
   const j = await loadJournal();
   const f = await loadFavorites();
-  const payload = JSON.stringify({ profile, journal: j, favorites: f });
+  const w = await loadWeightLog();
+  const payload = JSON.stringify({ profile, journal: j, favorites: f, weightLog: w });
   const area = document.getElementById('exportArea');
   area.style.display = 'block';
   area.value = payload;
@@ -832,14 +879,123 @@ document.getElementById('importBtn').addEventListener('click', async ()=>{
       favoritesData = parsed.favorites;
       await storeSet('favorites', favoritesData);
     }
+    if(parsed.weightLog){
+      await storeSet('weightLog', parsed.weightLog);
+    }
     msg.innerHTML = '<p class="note" style="color:#2E5C3A;">Données restaurées avec succès.</p>';
     await loadProfileIntoForm();
     await renderJournal();
     await renderHistory();
     await renderFavorites();
+    await renderWeight();
   }catch(e){
     msg.innerHTML = '<div class="err">Ce texte ne semble pas être une sauvegarde valide.</div>';
   }
+});
+
+/* ---------------- Weight tracking ---------------- */
+async function loadWeightLog(){
+  const log = await storeGet('weightLog');
+  return log || [];
+}
+function formatDateShort(iso){
+  return new Date(iso+'T12:00:00').toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'});
+}
+async function renderWeight(){
+  const log = (await loadWeightLog()).slice().sort((a,b)=> a.date.localeCompare(b.date));
+  const numEl = document.getElementById('weightCurrentNum');
+  const deltaEl = document.getElementById('weightDelta');
+  const chart = document.getElementById('weightChart');
+  const listEl = document.getElementById('weightList');
+  const noteEl = document.getElementById('weightNote');
+
+  if(log.length===0){
+    numEl.textContent = '—';
+    deltaEl.textContent = '';
+    chart.innerHTML = '';
+    listEl.innerHTML = '<div class="empty">Aucune pesée enregistrée. Ajoute ton poids du jour ci-dessus.</div>';
+    noteEl.textContent = '';
+    return;
+  }
+
+  const latest = log[log.length-1];
+  const first = log[0];
+  numEl.textContent = latest.weight + ' kg';
+  const diff = Math.round((latest.weight - first.weight)*10)/10;
+  if(log.length>1){
+    deltaEl.textContent = (diff<=0 ? '' : '+') + diff + ' kg depuis le ' + formatDateShort(first.date);
+    deltaEl.className = 'delta ' + (diff<0?'down':(diff>0?'up':''));
+  } else {
+    deltaEl.textContent = 'Première pesée enregistrée';
+    deltaEl.className = 'delta';
+  }
+
+  // Chart (simple line, last 30 entries)
+  const pts = log.slice(-30);
+  const weights = pts.map(p=>p.weight);
+  const min = Math.min(...weights), max = Math.max(...weights);
+  const range = (max-min) || 1;
+  const padY = 14;
+  const w = 320, h = 130;
+  const coords = pts.map((p,i)=>{
+    const x = pts.length===1 ? w/2 : (i/(pts.length-1))*(w-20)+10;
+    const y = h-padY - ((p.weight-min)/range)*(h-padY*2);
+    return [x,y];
+  });
+  const path = coords.map((c,i)=> (i===0?'M':'L')+c[0].toFixed(1)+','+c[1].toFixed(1)).join(' ');
+  const dots = coords.map(c=>`<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="3" fill="#5C8368"/>`).join('');
+  chart.innerHTML = `<path d="${path}" fill="none" stroke="#5C8368" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>${dots}`;
+
+  // Suggest syncing with profile if different
+  if(profile && profile.weight !== latest.weight){
+    noteEl.innerHTML = `Ton profil indique ${profile.weight} kg. <a href="#" id="syncWeightLink" style="color:var(--sage);font-weight:600;">Mettre à jour l'objectif calorique avec ${latest.weight} kg</a>`;
+    const link = document.getElementById('syncWeightLink');
+    if(link) link.addEventListener('click', async (e)=>{
+      e.preventDefault();
+      profile.weight = latest.weight;
+      const r = computeTarget(profile);
+      profile.target = r.target;
+      await storeSet('profile', profile);
+      document.getElementById('inWeight').value = profile.weight;
+      renderJournal();
+      renderWeight();
+      showToast('Objectif calorique mis à jour.');
+    });
+  } else {
+    noteEl.textContent = '';
+  }
+
+  // List (most recent first)
+  listEl.innerHTML = log.slice().reverse().map((entry)=>`
+    <div class="weight-entry" data-date="${entry.date}">
+      <div><div class="wv mono">${entry.weight} kg</div><div class="wd">${formatDateShort(entry.date)}</div></div>
+      <button class="wdel" data-date="${entry.date}">✕</button>
+    </div>
+  `).join('');
+  listEl.querySelectorAll('.wdel').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      const date = b.dataset.date;
+      const updated = (await loadWeightLog()).filter(e=>e.date!==date);
+      await storeSet('weightLog', updated);
+      renderWeight();
+    });
+  });
+}
+
+document.getElementById('addWeightBtn').addEventListener('click', async ()=>{
+  const val = parseFloat(document.getElementById('inNewWeight').value);
+  if(!val || val<=0){
+    showToast('Entre un poids valide.');
+    return;
+  }
+  const date = todayKey();
+  const log = await loadWeightLog();
+  const existingIdx = log.findIndex(e=>e.date===date);
+  if(existingIdx>=0) log[existingIdx].weight = val;
+  else log.push({date, weight:val});
+  await storeSet('weightLog', log);
+  document.getElementById('inNewWeight').value = '';
+  renderWeight();
 });
 
 /* ---------------- Init ---------------- */
@@ -848,7 +1004,7 @@ document.getElementById('importBtn').addEventListener('click', async ()=>{
   await renderJournal();
   await renderHistory();
   await renderFavorites();
-  if(!profile){
+  await renderWeight();
     document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
     document.querySelector('nav.tabs button[data-screen="profil"]').classList.add('active');
     document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
