@@ -126,6 +126,8 @@
   .hist-day .bar-fill{width:100%;border-radius:4px;background:var(--sage);}
   .hist-day .bar-fill.over{background:var(--coral);}
   .hist-day .k{font-size:9.5px;color:var(--ink-soft);}
+  .hist-day{cursor:pointer;}
+  .hist-day:active{opacity:.7;}
 
   /* ---- Favorites ---- */
   .fav-strip{display:flex;gap:10px;overflow-x:auto;padding:2px 2px 8px;}
@@ -186,6 +188,20 @@
   .weight-chart{width:100%;height:130px;margin:10px 0 4px;}
   .weight-log-row{display:flex;gap:8px;margin-bottom:8px;}
   .weight-log-row input{flex:1;}
+  .stats-table{
+    background:var(--surface);border-radius:16px;overflow:hidden;
+    box-shadow:0 1px 2px rgba(31,51,39,.05);margin-bottom:16px;
+  }
+  .stats-row{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:13px 16px;border-bottom:1px solid var(--line);
+  }
+  .stats-row:last-child{border-bottom:none;}
+  .stats-row .sl{font-size:13.5px;color:var(--ink-soft);}
+  .stats-row .sv{font-size:15px;font-weight:700;}
+  .stats-row .sv.down{color:var(--sage);}
+  .stats-row .sv.up{color:var(--coral);}
+  .stats-row .sv.flat{color:var(--ink-soft);}
   .weight-entry{
     display:flex;align-items:center;justify-content:space-between;
     background:var(--surface);border-radius:12px;padding:10px 14px;margin-bottom:8px;
@@ -271,7 +287,7 @@
   <div class="brand display">Mon Assiette</div>
   <div style="text-align:right;">
     <div class="date" id="todayLabel"></div>
-    <div class="version">v2026-08-27-3</div>
+    <div class="version">v2026-08-27-7</div>
   </div>
 </header>
 
@@ -317,10 +333,13 @@
     <svg class="weight-chart" id="weightChart" viewBox="0 0 320 130" preserveAspectRatio="none"></svg>
     <div class="weight-log-row">
       <input type="number" id="inNewWeight" inputmode="decimal" placeholder="Poids aujourd'hui (kg)" step="0.1">
+      <input type="number" id="inNewWaist" inputmode="decimal" placeholder="Tour de taille (cm)" step="0.5" style="display:none;">
       <button class="btn-primary" style="width:auto;padding:12px 16px;margin-top:0;" id="addWeightBtn">Ajouter</button>
     </div>
     <p class="note" id="weightNote" style="margin-top:8px;"></p>
   </div>
+
+  <div class="stats-table" id="weightStats"></div>
 
   <div class="section-title">Historique</div>
   <div id="weightList"></div>
@@ -345,6 +364,7 @@
   <div class="field"><label>Âge (années)</label><input type="number" id="inAge" inputmode="numeric" placeholder="ex. 42"></div>
   <div class="field"><label>Taille (cm)</label><input type="number" id="inHeight" inputmode="numeric" placeholder="ex. 178"></div>
   <div class="field"><label>Poids actuel (kg)</label><input type="number" id="inWeight" inputmode="decimal" placeholder="ex. 84"></div>
+  <div class="field" id="waistFieldProfil" style="display:none;"><label>Tour de taille (cm)</label><input type="number" id="inWaist" inputmode="decimal" placeholder="ex. 98"></div>
 
   <div class="field">
     <label>Niveau d'activité</label>
@@ -413,6 +433,21 @@
   <button data-screen="poids"><span class="ic">⚖️</span>Poids</button>
   <button data-screen="profil"><span class="ic">⚙️</span>Profil</button>
 </nav>
+
+<!-- ===================== MODAL: DAY DETAIL ===================== -->
+<div class="modal-bg" id="dayModalBg">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 class="display" id="dayModalTitle">Repas du —</h3>
+      <button id="closeDayModal">✕</button>
+    </div>
+    <div class="plate-sub" style="justify-content:center;gap:36px;margin-bottom:16px;">
+      <div><div class="v mono" id="dayModalKcal">0</div><div class="k">kcal</div></div>
+      <div><div class="v mono" id="dayModalPoints">0</div><div class="k">points</div></div>
+    </div>
+    <div id="dayModalList"></div>
+  </div>
+</div>
 
 <!-- ===================== MODAL: ADD ENTRY ===================== -->
 <div class="modal-bg" id="modalBg">
@@ -511,9 +546,13 @@ document.querySelectorAll('nav.tabs button').forEach(btn=>{
 
 /* ---------------- Profil form ---------------- */
 let selSex = null, selGoal = null;
+function toggleWaistField(){
+  document.getElementById('waistFieldProfil').style.display = (selSex==='homme') ? 'block' : 'none';
+}
 document.querySelectorAll('.sexbtn').forEach(b=>b.addEventListener('click', ()=>{
   document.querySelectorAll('.sexbtn').forEach(x=>x.classList.remove('sel'));
   b.classList.add('sel'); selSex = b.dataset.val;
+  toggleWaistField();
 }));
 document.querySelectorAll('.goalbtn').forEach(b=>b.addEventListener('click', ()=>{
   document.querySelectorAll('.goalbtn').forEach(x=>x.classList.remove('sel'));
@@ -544,6 +583,10 @@ document.getElementById('saveProfileBtn').addEventListener('click', async ()=>{
     return;
   }
   profile = { sex:selSex, age, height, weight, activity, goalRate:selGoal };
+  if(selSex==='homme'){
+    const waist = parseFloat(document.getElementById('inWaist').value);
+    if(waist) profile.waist = waist;
+  }
   const r = computeTarget(profile);
   profile.target = r.target;
   await storeSet('profile', profile);
@@ -558,6 +601,7 @@ document.getElementById('saveProfileBtn').addEventListener('click', async ()=>{
   `;
   renderJournal();
   renderHistory();
+  renderWeight();
 });
 
 async function loadProfileIntoForm(){
@@ -571,6 +615,8 @@ async function loadProfileIntoForm(){
   selGoal = profile.goalRate;
   document.querySelectorAll('.sexbtn').forEach(b=>b.classList.toggle('sel', b.dataset.val===selSex));
   document.querySelectorAll('.goalbtn').forEach(b=>b.classList.toggle('sel', parseFloat(b.dataset.val)===selGoal));
+  toggleWaistField();
+  if(profile.waist) document.getElementById('inWaist').value = profile.waist;
   const r = computeTarget(profile);
   document.getElementById('profileResult').innerHTML = `
     <div class="result-card">
@@ -669,13 +715,63 @@ async function renderHistory(){
     const ratio = Math.min(total/target, 1.3);
     const h = Math.max(ratio*44, total>0?4:2);
     const label = new Date(d+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'short'}).replace('.','');
-    return `<div class="hist-day">
+    return `<div class="hist-day" data-date="${d}">
       <div class="d">${label}</div>
       <div class="bar-track"><div class="bar-fill ${ratio>1?'over':''}" style="height:${h}px"></div></div>
       <div class="k mono">${total||'–'}</div>
     </div>`;
   }).join('');
+  strip.querySelectorAll('.hist-day').forEach(el=>{
+    el.addEventListener('click', ()=> openDayDetail(el.dataset.date));
+  });
 }
+
+/* ---------------- Day detail modal (consult past days) ---------------- */
+async function openDayDetail(dateKey){
+  const list = await getEntries(dateKey);
+  const total = list.reduce((s,e)=>s+(e.kcal||0),0);
+  const points = list.reduce((s,e)=>s+(e.points||0),0);
+  const d = new Date(dateKey+'T12:00:00');
+  const label = d.toLocaleDateString('fr-FR',{weekday:'long', day:'numeric', month:'long'});
+  document.getElementById('dayModalTitle').textContent = dateKey===todayKey() ? "Aujourd'hui" : label;
+  document.getElementById('dayModalKcal').textContent = total;
+  document.getElementById('dayModalPoints').textContent = points;
+
+  const listEl = document.getElementById('dayModalList');
+  if(list.length===0){
+    listEl.innerHTML = '<div class="empty">Aucun repas enregistré ce jour-là.</div>';
+  } else {
+    listEl.innerHTML = list.map((e,i)=>`
+      <div class="entry">
+        ${e.thumb ? `<img src="${e.thumb}">` : `<div class="noimg">🍴</div>`}
+        <div class="meta">
+          <div class="name">${escapeHtml(e.name)}</div>
+          <div class="sub">${e.points} points</div>
+        </div>
+        <div class="kcal mono">${e.kcal} kcal</div>
+        <button class="del" data-i="${i}">✕</button>
+      </div>
+    `).join('');
+    listEl.querySelectorAll('.del').forEach(b=>{
+      b.addEventListener('click', async ()=>{
+        const i = parseInt(b.dataset.i);
+        const current = await getEntries(dateKey);
+        current.splice(i,1);
+        await saveEntries(dateKey, current);
+        openDayDetail(dateKey);
+        renderJournal();
+        renderHistory();
+      });
+    });
+  }
+  document.getElementById('dayModalBg').classList.add('open');
+}
+document.getElementById('closeDayModal').addEventListener('click', ()=>{
+  document.getElementById('dayModalBg').classList.remove('open');
+});
+document.getElementById('dayModalBg').addEventListener('click', (e)=>{
+  if(e.target.id==='dayModalBg') document.getElementById('dayModalBg').classList.remove('open');
+});
 
 /* ---------------- Favorites (quick-add saved meals) ---------------- */
 const DEFAULT_FAVORITES = [
@@ -901,20 +997,83 @@ async function loadWeightLog(){
 function formatDateShort(iso){
   return new Date(iso+'T12:00:00').toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'});
 }
+function baselineWeightFor(log, sinceDateKey){
+  // last known weight on or before sinceDateKey, else the earliest entry available
+  const before = log.filter(e=>e.date<=sinceDateKey);
+  if(before.length) return before[before.length-1];
+  return log[0];
+}
+function mondayOfWeek(d){
+  const day = d.getDay(); // 0=Sun..6=Sat
+  const diff = (day===0? -6 : 1-day); // days to subtract to reach Monday
+  const m = new Date(d);
+  m.setDate(d.getDate()+diff);
+  return m;
+}
+function toKey(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function renderWeightStats(log, latest){
+  const el = document.getElementById('weightStats');
+  if(!log.length){ el.innerHTML=''; return; }
+
+  const now = new Date();
+  const monthStartKey = toKey(new Date(now.getFullYear(), now.getMonth(), 1));
+  const weekStartKey = toKey(mondayOfWeek(now));
+
+  const rows = [
+    { label:'Depuis le début du suivi', baseline: log[0], unit:'kg' },
+    { label:'Depuis le début du mois', baseline: baselineWeightFor(log, monthStartKey), unit:'kg' },
+    { label:'Depuis le début de la semaine', baseline: baselineWeightFor(log, weekStartKey), unit:'kg' },
+  ];
+
+  let html = rows.map(r=>{
+    const diff = Math.round((latest.weight - r.baseline.weight)*10)/10;
+    const cls = diff<0?'down':(diff>0?'up':'flat');
+    const sign = diff>0?'+':'';
+    return `<div class="stats-row"><div class="sl">${r.label}</div><div class="sv ${cls} mono">${sign}${diff} kg</div></div>`;
+  }).join('');
+
+  // Waist stats (men only, and only if at least one waist measurement exists)
+  const waistEntries = log.filter(e=>e.waist);
+  if(profile && profile.sex==='homme' && waistEntries.length){
+    const latestWaist = waistEntries[waistEntries.length-1];
+    const waistRows = [
+      { label:'Tour de taille — depuis le début', baseline: waistEntries[0] },
+      { label:'Tour de taille — depuis le mois', baseline: baselineWeightFor(waistEntries, monthStartKey) },
+      { label:'Tour de taille — depuis la semaine', baseline: baselineWeightFor(waistEntries, weekStartKey) },
+    ];
+    html += waistRows.map(r=>{
+      const diff = Math.round((latestWaist.waist - r.baseline.waist)*10)/10;
+      const cls = diff<0?'down':(diff>0?'up':'flat');
+      const sign = diff>0?'+':'';
+      return `<div class="stats-row"><div class="sl">${r.label}</div><div class="sv ${cls} mono">${sign}${diff} cm</div></div>`;
+    }).join('');
+  }
+
+  el.innerHTML = html;
+}
 async function renderWeight(){
-  const log = (await loadWeightLog()).slice().sort((a,b)=> a.date.localeCompare(b.date));
+  let log = (await loadWeightLog()).slice().sort((a,b)=> a.date.localeCompare(b.date));
   const numEl = document.getElementById('weightCurrentNum');
   const deltaEl = document.getElementById('weightDelta');
   const chart = document.getElementById('weightChart');
   const listEl = document.getElementById('weightList');
   const noteEl = document.getElementById('weightNote');
+  noteEl.textContent = '';
+  document.getElementById('inNewWaist').style.display = (profile && profile.sex==='homme') ? 'block' : 'none';
+
+  // Seed with profile weight as the first data point if no pesée logged yet
+  if(log.length===0 && profile && profile.weight){
+    log = [{date: todayKey(), weight: profile.weight}];
+    await storeSet('weightLog', log);
+  }
 
   if(log.length===0){
     numEl.textContent = '—';
     deltaEl.textContent = '';
     chart.innerHTML = '';
-    listEl.innerHTML = '<div class="empty">Aucune pesée enregistrée. Ajoute ton poids du jour ci-dessus.</div>';
-    noteEl.textContent = '';
+    listEl.innerHTML = '<div class="empty">Complète ton profil ou ajoute ton poids du jour ci-dessus.</div>';
     return;
   }
 
@@ -946,29 +1105,14 @@ async function renderWeight(){
   const dots = coords.map(c=>`<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="3" fill="#5C8368"/>`).join('');
   chart.innerHTML = `<path d="${path}" fill="none" stroke="#5C8368" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>${dots}`;
 
-  // Suggest syncing with profile if different
-  if(profile && profile.weight !== latest.weight){
-    noteEl.innerHTML = `Ton profil indique ${profile.weight} kg. <a href="#" id="syncWeightLink" style="color:var(--sage);font-weight:600;">Mettre à jour l'objectif calorique avec ${latest.weight} kg</a>`;
-    const link = document.getElementById('syncWeightLink');
-    if(link) link.addEventListener('click', async (e)=>{
-      e.preventDefault();
-      profile.weight = latest.weight;
-      const r = computeTarget(profile);
-      profile.target = r.target;
-      await storeSet('profile', profile);
-      document.getElementById('inWeight').value = profile.weight;
-      renderJournal();
-      renderWeight();
-      showToast('Objectif calorique mis à jour.');
-    });
-  } else {
-    noteEl.textContent = '';
-  }
+  // (Le rapprochement avec l'objectif calorique se fait uniquement dans l'onglet Profil)
+
+  renderWeightStats(log, latest);
 
   // List (most recent first)
   listEl.innerHTML = log.slice().reverse().map((entry)=>`
     <div class="weight-entry" data-date="${entry.date}">
-      <div><div class="wv mono">${entry.weight} kg</div><div class="wd">${formatDateShort(entry.date)}</div></div>
+      <div><div class="wv mono">${entry.weight} kg${entry.waist?' · '+entry.waist+' cm':''}</div><div class="wd">${formatDateShort(entry.date)}</div></div>
       <button class="wdel" data-date="${entry.date}">✕</button>
     </div>
   `).join('');
@@ -988,13 +1132,21 @@ document.getElementById('addWeightBtn').addEventListener('click', async ()=>{
     showToast('Entre un poids valide.');
     return;
   }
+  const waistVal = parseFloat(document.getElementById('inNewWaist').value);
   const date = todayKey();
   const log = await loadWeightLog();
   const existingIdx = log.findIndex(e=>e.date===date);
-  if(existingIdx>=0) log[existingIdx].weight = val;
-  else log.push({date, weight:val});
+  if(existingIdx>=0){
+    log[existingIdx].weight = val;
+    if(waistVal) log[existingIdx].waist = waistVal;
+  } else {
+    const entry = {date, weight:val};
+    if(waistVal) entry.waist = waistVal;
+    log.push(entry);
+  }
   await storeSet('weightLog', log);
   document.getElementById('inNewWeight').value = '';
+  document.getElementById('inNewWaist').value = '';
   renderWeight();
 });
 
