@@ -287,7 +287,7 @@
   <div class="brand display">Mon Assiette</div>
   <div style="text-align:right;">
     <div class="date" id="todayLabel"></div>
-    <div class="version">v2026-08-27-7</div>
+    <div class="version">v2026-08-27-8</div>
   </div>
 </header>
 
@@ -1013,6 +1013,11 @@ function mondayOfWeek(d){
 function toKey(d){
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
+function addDays(dateKey, delta){
+  const d = new Date(dateKey+'T12:00:00');
+  d.setDate(d.getDate()+delta);
+  return toKey(d);
+}
 function renderWeightStats(log, latest){
   const el = document.getElementById('weightStats');
   if(!log.length){ el.innerHTML=''; return; }
@@ -1066,6 +1071,14 @@ async function renderWeight(){
   // Seed with profile weight as the first data point if no pesée logged yet
   if(log.length===0 && profile && profile.weight){
     log = [{date: todayKey(), weight: profile.weight}];
+    await storeSet('weightLog', log);
+  }
+
+  // If a real weigh-in exists but doesn't match the profile's starting weight,
+  // insert the profile weight as the true starting point (dated just before it)
+  if(log.length>0 && profile && profile.weight && log[0].weight !== profile.weight){
+    const startDate = addDays(log[0].date, -1);
+    log = [{date: startDate, weight: profile.weight}, ...log];
     await storeSet('weightLog', log);
   }
 
