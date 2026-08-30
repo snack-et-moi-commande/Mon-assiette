@@ -293,7 +293,7 @@
   <div class="brand display">Mon Assiette</div>
   <div style="text-align:right;">
     <div class="date" id="todayLabel"></div>
-    <div class="version">v2026-08-27-11</div>
+    <div class="version">v2026-08-27-12</div>
   </div>
 </header>
 
@@ -452,6 +452,7 @@
       <div><div class="v mono" id="dayModalPoints">0</div><div class="k">points</div></div>
     </div>
     <div id="dayModalList"></div>
+    <button class="btn-secondary" id="dayModalAddBtn">+ Ajouter un repas à ce jour</button>
   </div>
 </div>
 
@@ -459,7 +460,7 @@
 <div class="modal-bg" id="modalBg">
   <div class="modal">
     <div class="modal-head">
-      <h3 class="display">Ajouter un repas</h3>
+      <h3 class="display" id="modalTitle">Ajouter un repas</h3>
       <button id="closeModal">✕</button>
     </div>
 
@@ -793,6 +794,10 @@ async function openDayDetail(dateKey){
     });
   }
   document.getElementById('dayModalBg').classList.add('open');
+  document.getElementById('dayModalAddBtn').onclick = ()=>{
+    document.getElementById('dayModalBg').classList.remove('open');
+    openModal(dateKey);
+  };
 }
 document.getElementById('closeDayModal').addEventListener('click', ()=>{
   document.getElementById('dayModalBg').classList.remove('open');
@@ -857,7 +862,13 @@ async function renderFavorites(){
 
 /* ---------------- Modal / add entry flow ---------------- */
 const modalBg = document.getElementById('modalBg');
-function openModal(){
+let modalTargetDate = null;
+function openModal(dateKey){
+  modalTargetDate = dateKey || todayKey();
+  const isToday = modalTargetDate === todayKey();
+  const titleLabel = isToday ? 'Ajouter un repas' :
+    'Ajouter — ' + new Date(modalTargetDate+'T12:00:00').toLocaleDateString('fr-FR',{day:'numeric', month:'long'});
+  document.getElementById('modalTitle').textContent = titleLabel;
   modalBg.classList.add('open');
   document.getElementById('modalStep1').style.display='block';
   document.getElementById('modalAnalyzing').style.display='none';
@@ -870,7 +881,7 @@ function openModal(){
   currentImageBase64 = null;
 }
 function closeModal(){ modalBg.classList.remove('open'); }
-document.getElementById('fabAdd').addEventListener('click', openModal);
+document.getElementById('fabAdd').addEventListener('click', ()=>openModal(todayKey()));
 document.getElementById('closeModal').addEventListener('click', closeModal);
 modalBg.addEventListener('click', (e)=>{ if(e.target===modalBg) closeModal(); });
 
@@ -977,9 +988,10 @@ document.getElementById('confirmAddBtn').addEventListener('click', async ()=>{
     return;
   }
   const entry = { name, kcal, points, thumb: currentImageBase64 ? ('data:'+currentImageMedia+';base64,'+currentImageBase64) : null, ts: Date.now() };
-  const list = await getEntries(todayKey());
+  const targetDate = modalTargetDate || todayKey();
+  const list = await getEntries(targetDate);
   list.push(entry);
-  await saveEntries(todayKey(), list);
+  await saveEntries(targetDate, list);
   if(document.getElementById('fSaveFav').checked){
     const favs = await loadFavorites();
     favs.push({ id:'fav-'+Date.now(), name, kcal, points });
@@ -989,6 +1001,10 @@ document.getElementById('confirmAddBtn').addEventListener('click', async ()=>{
   closeModal();
   renderJournal();
   renderHistory();
+  if(targetDate !== todayKey()){
+    openDayDetail(targetDate);
+    showToast('Repas ajouté au ' + new Date(targetDate+'T12:00:00').toLocaleDateString('fr-FR',{day:'numeric', month:'long'}));
+  }
 });
 
 /* ---------------- Manual backup (export / import) ---------------- */
