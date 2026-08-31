@@ -191,6 +191,11 @@
   .weight-current .delta{font-size:13px;margin-top:2px;}
   .weight-current .delta.down{color:var(--sage);}
   .weight-current .delta.up{color:var(--coral);}
+  .chart-tooltip{
+    text-align:center;font-size:12.5px;color:var(--ink-soft);min-height:16px;margin:2px 0 4px;
+  }
+  .chart-tooltip.filled{font-weight:600;color:var(--ink);}
+  .weight-chart circle{cursor:pointer;}
   .weight-chart{width:100%;height:130px;margin:10px 0 4px;}
   .weight-log-row{display:flex;gap:8px;margin-bottom:8px;}
   .weight-log-row input{flex:1;}
@@ -293,7 +298,7 @@
   <div class="brand display">Mon Assiette</div>
   <div style="text-align:right;">
     <div class="date" id="todayLabel"></div>
-    <div class="version">v2026-08-27-12</div>
+    <div class="version">v2026-08-27-13</div>
   </div>
 </header>
 
@@ -337,12 +342,22 @@
       <div class="delta" id="weightDelta"></div>
     </div>
     <svg class="weight-chart" id="weightChart" viewBox="0 0 320 130" preserveAspectRatio="none"></svg>
+    <div class="chart-tooltip" id="weightChartTooltip">Touche un point de la courbe pour voir le détail</div>
     <div class="weight-log-row">
       <input type="number" id="inNewWeight" inputmode="decimal" placeholder="Poids aujourd'hui (kg)" step="0.1">
       <input type="number" id="inNewWaist" inputmode="decimal" placeholder="Tour de taille (cm)" step="0.5" style="display:none;">
       <button class="btn-primary" style="width:auto;padding:12px 16px;margin-top:0;" id="addWeightBtn">Ajouter</button>
     </div>
     <p class="note" id="weightNote" style="margin-top:8px;"></p>
+  </div>
+
+  <div class="weight-card" id="waistCard" style="display:none;">
+    <div class="weight-current">
+      <div class="num mono" id="waistCurrentNum">—</div>
+      <div class="delta" id="waistDelta"></div>
+    </div>
+    <svg class="weight-chart" id="waistChart" viewBox="0 0 320 130" preserveAspectRatio="none"></svg>
+    <div class="chart-tooltip" id="waistChartTooltip">Touche un point de la courbe pour voir le détail</div>
   </div>
 
   <div class="stats-table" id="weightStats"></div>
@@ -1127,6 +1142,35 @@ function renderWeightStats(log, latest){
 
   el.innerHTML = html;
 }
+function drawChart(svgEl, tooltipEl, entries, field, unit){
+  const w = 320, h = 130, padY = 14;
+  const values = entries.map(p=>p[field]);
+  const min = Math.min(...values), max = Math.max(...values);
+  const range = (max-min) || 1;
+  const coords = entries.map((p,i)=>{
+    const x = entries.length===1 ? w/2 : (i/(entries.length-1))*(w-20)+10;
+    const y = h-padY - ((p[field]-min)/range)*(h-padY*2);
+    return [x,y];
+  });
+  const path = coords.map((c,i)=> (i===0?'M':'L')+c[0].toFixed(1)+','+c[1].toFixed(1)).join(' ');
+  const dots = coords.map((c,i)=>`<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="4" fill="#5C8368" data-i="${i}"/>`).join('');
+  svgEl.innerHTML = `<path d="${path}" fill="none" stroke="#5C8368" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>${dots}`;
+  svgEl.querySelectorAll('circle').forEach(c=>{
+    c.addEventListener('click', ()=>{
+      svgEl.querySelectorAll('circle').forEach(o=>o.setAttribute('r','4'));
+      c.setAttribute('r','6');
+      const p = entries[parseInt(c.dataset.i)];
+      tooltipEl.textContent = formatDateShort(p.date) + ' · ' + p[field] + ' ' + unit;
+      tooltipEl.classList.add('filled');
+    });
+  });
+  // default: show the latest point's value
+  if(entries.length){
+    const last = entries[entries.length-1];
+    tooltipEl.textContent = formatDateShort(last.date) + ' · ' + last[field] + ' ' + unit;
+    tooltipEl.classList.add('filled');
+  }
+}
 async function renderWeight(){
   let log = (await loadWeightLog()).slice().sort((a,b)=> a.date.localeCompare(b.date));
   const numEl = document.getElementById('weightCurrentNum');
@@ -1171,21 +1215,30 @@ async function renderWeight(){
     deltaEl.className = 'delta';
   }
 
-  // Chart (simple line, last 30 entries)
-  const pts = log.slice(-30);
-  const weights = pts.map(p=>p.weight);
-  const min = Math.min(...weights), max = Math.max(...weights);
-  const range = (max-min) || 1;
-  const padY = 14;
-  const w = 320, h = 130;
-  const coords = pts.map((p,i)=>{
-    const x = pts.length===1 ? w/2 : (i/(pts.length-1))*(w-20)+10;
-    const y = h-padY - ((p.weight-min)/range)*(h-padY*2);
-    return [x,y];
-  });
-  const path = coords.map((c,i)=> (i===0?'M':'L')+c[0].toFixed(1)+','+c[1].toFixed(1)).join(' ');
-  const dots = coords.map(c=>`<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="3" fill="#5C8368"/>`).join('');
-  chart.innerHTML = `<path d="${path}" fill="none" stroke="#5C8368" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>${dots}`;
+  // Chart (simple line, last 30 entries) with tap-to-reveal tooltip
+  drawChart(chart, document.getElementById('weightChartTooltip'), log.slice(-30), 'weight', 'kg');
+
+  // Waist chart & current value (men only, and only if at least one measurement exists)
+  const waistCard = document.getElementById('waistCard');
+  const waistEntriesAll = log.filter(e=>e.waist);
+  if(profile && profile.sex==='homme' && waistEntriesAll.length){
+    waistCard.style.display = 'block';
+    const latestWaist = waistEntriesAll[waistEntriesAll.length-1];
+    const firstWaist = waistEntriesAll[0];
+    document.getElementById('waistCurrentNum').textContent = latestWaist.waist + ' cm';
+    const wDiff = Math.round((latestWaist.waist - firstWaist.waist)*10)/10;
+    const wDeltaEl = document.getElementById('waistDelta');
+    if(waistEntriesAll.length>1){
+      wDeltaEl.textContent = (wDiff<=0?'':'+') + wDiff + ' cm depuis le ' + formatDateShort(firstWaist.date);
+      wDeltaEl.className = 'delta ' + (wDiff<0?'down':(wDiff>0?'up':''));
+    } else {
+      wDeltaEl.textContent = 'Première mesure enregistrée';
+      wDeltaEl.className = 'delta';
+    }
+    drawChart(document.getElementById('waistChart'), document.getElementById('waistChartTooltip'), waistEntriesAll.slice(-30), 'waist', 'cm');
+  } else {
+    waistCard.style.display = 'none';
+  }
 
   // (Le rapprochement avec l'objectif calorique se fait uniquement dans l'onglet Profil)
 
