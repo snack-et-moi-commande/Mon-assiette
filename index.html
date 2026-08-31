@@ -298,7 +298,7 @@
   <div class="brand display">Mon Assiette</div>
   <div style="text-align:right;">
     <div class="date" id="todayLabel"></div>
-    <div class="version">v2026-08-27-13</div>
+    <div class="version">v2026-08-27-14</div>
   </div>
 </header>
 
@@ -1102,29 +1102,29 @@ function addDays(dateKey, delta){
   d.setDate(d.getDate()+delta);
   return toKey(d);
 }
-function renderWeightStats(log, latest){
+function renderWeightStats(weightEntries, latest, fullLog){
   const el = document.getElementById('weightStats');
-  if(!log.length){ el.innerHTML=''; return; }
-
   const now = new Date();
   const monthStartKey = toKey(new Date(now.getFullYear(), now.getMonth(), 1));
   const weekStartKey = toKey(mondayOfWeek(now));
 
-  const rows = [
-    { label:'Depuis le début du suivi', baseline: log[0], unit:'kg' },
-    { label:'Depuis le début du mois', baseline: baselineWeightFor(log, monthStartKey), unit:'kg' },
-    { label:'Depuis le début de la semaine', baseline: baselineWeightFor(log, weekStartKey), unit:'kg' },
-  ];
-
-  let html = rows.map(r=>{
-    const diff = Math.round((latest.weight - r.baseline.weight)*10)/10;
-    const cls = diff<0?'down':(diff>0?'up':'flat');
-    const sign = diff>0?'+':'';
-    return `<div class="stats-row"><div class="sl">${r.label}</div><div class="sv ${cls} mono">${sign}${diff} kg</div></div>`;
-  }).join('');
+  let html = '';
+  if(weightEntries.length){
+    const rows = [
+      { label:'Depuis le début du suivi', baseline: weightEntries[0], unit:'kg' },
+      { label:'Depuis le début du mois', baseline: baselineWeightFor(weightEntries, monthStartKey), unit:'kg' },
+      { label:'Depuis le début de la semaine', baseline: baselineWeightFor(weightEntries, weekStartKey), unit:'kg' },
+    ];
+    html += rows.map(r=>{
+      const diff = Math.round((latest.weight - r.baseline.weight)*10)/10;
+      const cls = diff<0?'down':(diff>0?'up':'flat');
+      const sign = diff>0?'+':'';
+      return `<div class="stats-row"><div class="sl">${r.label}</div><div class="sv ${cls} mono">${sign}${diff} kg</div></div>`;
+    }).join('');
+  }
 
   // Waist stats (men only, and only if at least one waist measurement exists)
-  const waistEntries = log.filter(e=>e.waist);
+  const waistEntries = (fullLog||[]).filter(e=>typeof e.waist==='number').sort((a,b)=>a.date.localeCompare(b.date));
   if(profile && profile.sex==='homme' && waistEntries.length){
     const latestWaist = waistEntries[waistEntries.length-1];
     const waistRows = [
@@ -1182,17 +1182,20 @@ async function renderWeight(){
   document.getElementById('inNewWaist').style.display = (profile && profile.sex==='homme') ? 'block' : 'none';
 
   // Seed with profile weight as the first data point if no pesée logged yet
-  if(log.length===0 && profile && profile.weight){
-    log = [{date: todayKey(), weight: profile.weight}];
+  const hasAnyWeight = log.some(e=>typeof e.weight==='number');
+  if(!hasAnyWeight && profile && profile.weight){
+    log = [{date: todayKey(), weight: profile.weight}, ...log];
     await storeSet('weightLog', log);
   }
 
   // If a real weigh-in exists but doesn't match the profile's starting weight,
   // insert the profile weight as the true starting point (dated just before it)
-  if(log.length>0 && profile && profile.weight && log[0].weight !== profile.weight){
-    const startDate = addDays(log[0].date, -1);
+  let weightEntries = log.filter(e=>typeof e.weight==='number').sort((a,b)=>a.date.localeCompare(b.date));
+  if(weightEntries.length>0 && profile && profile.weight && weightEntries[0].weight !== profile.weight){
+    const startDate = addDays(weightEntries[0].date, -1);
     log = [{date: startDate, weight: profile.weight}, ...log];
     await storeSet('weightLog', log);
+    weightEntries = log.filter(e=>typeof e.weight==='number').sort((a,b)=>a.date.localeCompare(b.date));
   }
 
   if(log.length===0){
@@ -1203,24 +1206,28 @@ async function renderWeight(){
     return;
   }
 
-  const latest = log[log.length-1];
-  const first = log[0];
-  numEl.textContent = latest.weight + ' kg';
-  const diff = Math.round((latest.weight - first.weight)*10)/10;
-  if(log.length>1){
-    deltaEl.textContent = (diff<=0 ? '' : '+') + diff + ' kg depuis le ' + formatDateShort(first.date);
-    deltaEl.className = 'delta ' + (diff<0?'down':(diff>0?'up':''));
+  if(weightEntries.length===0){
+    numEl.textContent = '—';
+    deltaEl.textContent = '';
+    chart.innerHTML = '';
   } else {
-    deltaEl.textContent = 'Première pesée enregistrée';
-    deltaEl.className = 'delta';
+    const latestW = weightEntries[weightEntries.length-1];
+    const firstW = weightEntries[0];
+    numEl.textContent = latestW.weight + ' kg';
+    const diff = Math.round((latestW.weight - firstW.weight)*10)/10;
+    if(weightEntries.length>1){
+      deltaEl.textContent = (diff<=0 ? '' : '+') + diff + ' kg depuis le ' + formatDateShort(firstW.date);
+      deltaEl.className = 'delta ' + (diff<0?'down':(diff>0?'up':''));
+    } else {
+      deltaEl.textContent = 'Première pesée enregistrée';
+      deltaEl.className = 'delta';
+    }
+    drawChart(chart, document.getElementById('weightChartTooltip'), weightEntries.slice(-30), 'weight', 'kg');
   }
-
-  // Chart (simple line, last 30 entries) with tap-to-reveal tooltip
-  drawChart(chart, document.getElementById('weightChartTooltip'), log.slice(-30), 'weight', 'kg');
 
   // Waist chart & current value (men only, and only if at least one measurement exists)
   const waistCard = document.getElementById('waistCard');
-  const waistEntriesAll = log.filter(e=>e.waist);
+  const waistEntriesAll = log.filter(e=>typeof e.waist==='number').sort((a,b)=>a.date.localeCompare(b.date));
   if(profile && profile.sex==='homme' && waistEntriesAll.length){
     waistCard.style.display = 'block';
     const latestWaist = waistEntriesAll[waistEntriesAll.length-1];
@@ -1242,12 +1249,12 @@ async function renderWeight(){
 
   // (Le rapprochement avec l'objectif calorique se fait uniquement dans l'onglet Profil)
 
-  renderWeightStats(log, latest);
+  renderWeightStats(weightEntries, weightEntries[weightEntries.length-1], log);
 
   // List (most recent first)
   listEl.innerHTML = log.slice().reverse().map((entry)=>`
     <div class="weight-entry" data-date="${entry.date}">
-      <div><div class="wv mono">${entry.weight} kg${entry.waist?' · '+entry.waist+' cm':''}</div><div class="wd">${formatDateShort(entry.date)}</div></div>
+      <div><div class="wv mono">${typeof entry.weight==='number' ? entry.weight+' kg' : ''}${(typeof entry.weight==='number' && entry.waist) ? ' · ' : ''}${entry.waist ? entry.waist+' cm' : ''}</div><div class="wd">${formatDateShort(entry.date)}</div></div>
       <button class="wdel" data-date="${entry.date}">✕</button>
     </div>
   `).join('');
@@ -1263,20 +1270,23 @@ async function renderWeight(){
 
 document.getElementById('addWeightBtn').addEventListener('click', async ()=>{
   const val = parseFloat(document.getElementById('inNewWeight').value);
-  if(!val || val<=0){
-    showToast('Entre un poids valide.');
+  const waistVal = parseFloat(document.getElementById('inNewWaist').value);
+  const hasWeight = !isNaN(val) && val>0;
+  const hasWaist = !isNaN(waistVal) && waistVal>0;
+  if(!hasWeight && !hasWaist){
+    showToast('Entre un poids et/ou un tour de taille valide.');
     return;
   }
-  const waistVal = parseFloat(document.getElementById('inNewWaist').value);
   const date = todayKey();
   const log = await loadWeightLog();
   const existingIdx = log.findIndex(e=>e.date===date);
   if(existingIdx>=0){
-    log[existingIdx].weight = val;
-    if(waistVal) log[existingIdx].waist = waistVal;
+    if(hasWeight) log[existingIdx].weight = val;
+    if(hasWaist) log[existingIdx].waist = waistVal;
   } else {
-    const entry = {date, weight:val};
-    if(waistVal) entry.waist = waistVal;
+    const entry = {date};
+    if(hasWeight) entry.weight = val;
+    if(hasWaist) entry.waist = waistVal;
     log.push(entry);
   }
   await storeSet('weightLog', log);
